@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>One Minute Breath</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400&family=Figtree:wght@400;500&display=swap">
+<style>
+  /* Layout: one centered breathing orb, a quiet line of guidance under it. */
+  :root {
+    --bg: #eef1ec;
+    --fg: #2b3330;
+    --muted: #6f7a75;
+    --orb: #9fb8ad;
+    --orb-glow: rgba(159, 184, 173, .45);
+    --btn: #2b3330;
+    --btn-fg: #eef1ec;
+    --display: "Newsreader", Georgia, serif;
+    --body: "Figtree", "Avenir Next", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141a18; --fg: #dfe6e1; --muted: #8b9792; --orb: #5f7f72;
+      --orb-glow: rgba(95, 127, 114, .4); --btn: #dfe6e1; --btn-fg: #141a18; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141a18; --fg: #dfe6e1; --muted: #8b9792; --orb: #5f7f72;
+    --orb-glow: rgba(95, 127, 114, .4); --btn: #dfe6e1; --btn-fg: #141a18; color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6;
+    display: grid; place-items: center; overflow: hidden;
+  }
+  .wrap {
+    width: 100%; max-width: 560px; text-align: center;
+    padding-block: 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid; gap: 28px; justify-items: center;
+  }
+  .inner { padding: 0; }
+  h1 { font-family: var(--display); font-weight: 300; font-size: clamp(34px, 8vw, 52px); line-height: 1.1; margin: 0; text-wrap: balance; }
+  p { margin: 0; max-width: 46ch; color: var(--muted); }
+  .stage { width: min(300px, 70vw); aspect-ratio: 1; max-width: 100%; display: grid; place-items: center; }
+  #orb {
+    width: 100%; aspect-ratio: 1; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, var(--bg), var(--orb) 70%);
+    box-shadow: 0 0 80px 10px var(--orb-glow);
+    transform: scale(.45); transition: transform 4s ease-in-out, opacity 4s ease-in-out;
+  }
+  #cue { font-family: var(--display); font-size: 26px; font-weight: 400; color: var(--fg); min-height: 1.6em; transition: opacity .8s; }
+  #sub { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; min-height: 1.6em; font-variant-numeric: tabular-nums; }
+  button {
+    font: 500 15px var(--body); background: var(--btn); color: var(--btn-fg);
+    border: 0; border-radius: 999px; padding: 13px 28px; cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--orb); outline-offset: 4px; }
+  .note { font-size: 13px; }
+
+  #face { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 30; background: #000; }
+  #face.go { animation: lunge 1.8s cubic-bezier(.1,.9,.2,1) forwards; }
+  #face.ghost { opacity: .13; mix-blend-mode: multiply; background: transparent; animation: none; }
+  @keyframes lunge {
+    0% { transform: scale(.2); opacity: 0; }
+    4% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1.35); opacity: 1; }
+  }
+  #after {
+    position: fixed; inset: 0; z-index: 40; background: #000; color: #e9e9e9;
+    display: grid; place-content: center; gap: 18px; justify-items: center; text-align: center;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  #after h1 { color: #fff; }
+  #after p { color: #9a9a9a; }
+  #after button { background: #e9e9e9; color: #000; }
+  @media (prefers-reduced-motion: reduce) { #face.go { animation: none; } }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <section id="intro" class="wrap inner">
+    <h1>One minute of slow breathing</h1>
+    <p>Box breathing: in for four, hold for four, out for four, hold for four. It's what I use when my head won't slow down.</p>
+    <button id="start" type="button">Begin</button>
+    <p class="note">About 60 seconds.</p>
+  </section>
+
+  <section id="session" class="wrap inner" hidden>
+    <div class="stage"><div id="orb"></div></div>
+    <div id="cue" aria-live="polite"></div>
+    <div id="sub"></div>
+    <button id="done" type="button" hidden>Done</button>
+  </section>
+</main>
+
+<canvas id="face" hidden></canvas>
+<div id="after" hidden>
+  <h1>Gotcha.</h1>
+  <p>Feeling relaxed?</p>
+  <button id="again" type="button">Breathe again</button>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let audio = null, pad = null, running = false;
+  const look = { x: 0, y: 0 };
+  window.addEventListener("pointermove", (e) => {
+    look.x = (e.clientX / innerWidth) * 2 - 1;
+    look.y = (e.clientY / innerHeight) * 2 - 1;
+  });
+
+  function initAudio() {
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audio = null; }
+    if (audio && audio.state === "suspended") audio.resume();
+  }
+
+  // soft pad plus filtered noise that swells with each breath
+  function startPad() {
+    if (!audio) return;
+    const master = audio.createGain();
+    master.gain.value = 0;
+    master.connect(audio.destination);
+    const oscs = [110, 164.8, 220, 277.2].map((f, i) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = f; o.detune.value = (i % 2 ? 4 : -4);
+      g.gain.value = i === 0 ? 0.22 : 0.1;
+      o.connect(g).connect(master); o.start();
+      return o;
+    });
+    const len = audio.sampleRate * 4, buf = audio.createBuffer(1, len, audio.sampleRate), d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+    const n = audio.createBufferSource(), lp = audio.createBiquadFilter(), ng = audio.createGain();
+    n.buffer = buf; n.loop = true; lp.type = "lowpass"; lp.frequency.value = 500;
+    ng.gain.value = 0.0;
+    n.connect(lp).connect(ng).connect(audio.destination); n.start();
+    master.gain.linearRampToValueAtTime(0.35, audio.currentTime + 3);
+    pad = { master, oscs, n, ng };
+  }
+  function swell(up, secs) {
+    if (!pad) return;
+    const t = audio.currentTime;
+    pad.ng.gain.cancelScheduledValues(t);
+    pad.ng.gain.setValueAtTime(pad.ng.gain.value, t);
+    pad.ng.gain.linearRampToValueAtTime(up ? 0.14 : 0.02, t + secs);
+  }
+  function cutPad() {
+    if (!pad) return;
+    const t = audio.currentTime;
+    pad.master.gain.cancelScheduledValues(t);
+    pad.master.gain.setValueAtTime(pad.master.gain.value, t);
+    pad.master.gain.linearRampToValueAtTime(0, t + 2);
+    pad.ng.gain.cancelScheduledValues(t);
+    pad.ng.gain.setValueAtTime(pad.ng.gain.value, t);
+    pad.ng.gain.linearRampToValueAtTime(0, t + 2);
+    const p = pad; pad = null;
+    setTimeout(() => { p.oscs.forEach((o) => o.stop()); p.n.stop(); }, 2200);
+  }
+
+  function distortion(amount) {
+    const ws = audio.createWaveShaper(), k = amount, n = 1024, curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = (i * 2) / n - 1; curve[i] = ((3 + k) * x * 20 * Math.PI / 180) / (Math.PI + k * Math.abs(x)); }
+    ws.curve = curve; ws.oversample = "4x";
+    return ws;
+  }
+
+  function scream(dur = 1.8) {
+    if (!audio) return;
+    const t = audio.currentTime, out = audio.createDynamicsCompressor(), dist = distortion(60), vol = audio.createGain();
+    vol.gain.value = 0.9;
+    dist.connect(vol).connect(out); out.connect(audio.destination);
+    // sub-bass slam you feel in headphones
+    const boom = audio.createOscillator(), bg = audio.createGain();
+    boom.type = "sine";
+    boom.frequency.setValueAtTime(90, t); boom.frequency.exponentialRampToValueAtTime(28, t + 0.9);
+    bg.gain.setValueAtTime(1.2, t); bg.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    boom.connect(bg).connect(out); boom.start(t); boom.stop(t + 1.2);
+    // breathy shriek
+    const len = audio.sampleRate * (dur + 0.3), buf = audio.createBuffer(1, len, audio.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const n = audio.createBufferSource(), bp = audio.createBiquadFilter(), ng = audio.createGain();
+    n.buffer = buf; bp.type = "bandpass"; bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(3000, t); bp.frequency.exponentialRampToValueAtTime(600, t + dur);
+    ng.gain.setValueAtTime(0.0001, t); ng.gain.exponentialRampToValueAtTime(1, t + 0.015); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.1);
+    n.connect(bp).connect(ng).connect(dist); n.start(t);
+    // detuned voices with a warble so it sounds alive
+    [700, 742, 933, 1245, 1660].forEach((f) => {
+      const o = audio.createOscillator(), g = audio.createGain(), lfo = audio.createOscillator(), lg = audio.createGain();
+      o.type = "sawtooth";
+      o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 0.3, t + dur);
+      lfo.frequency.value = 9 + Math.random() * 5; lg.gain.value = f * 0.07; lfo.connect(lg).connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(dist); o.start(t); lfo.start(t); o.stop(t + dur + 0.1); lfo.stop(t + dur + 0.1);
+    });
+  }
+
+  async function phase(cue, scale, secs) {
+    $("cue").textContent = cue;
+    if (scale != null) $("orb").style.transform = "scale(" + scale + ")";
+    for (let s = secs; s > 0; s--) { $("sub").textContent = s; await wait(1000); }
+  }
+
+  async function run() {
+    if (running) return;
+    running = true;
+    initAudio();
+    try { await document.documentElement.requestFullscreen(); } catch (e) {}
+    $("intro").hidden = true; $("session").hidden = false; $("done").hidden = true;
+    $("cue").style.opacity = 1;
+    $("orb").style.transition = "transform 4s ease-in-out, opacity 4s ease-in-out";
+    $("orb").style.transform = "scale(.45)"; $("orb").style.opacity = 1;
+    startPad();
+    $("cue").textContent = "Get comfortable"; $("sub").textContent = "";
+    await wait(3500);
+    const rounds = 3;
+    for (let r = 0; r < rounds; r++) {
+      const lastRound = r === rounds - 1;
+      swell(true, 4);  await phase("Breathe in", 1, 4);
+      if (r === 1) setTimeout(ghost, 2100);  // a face for a split second: "did I just see something?"
+      await phase("Hold", null, 4);
+      swell(false, 4); await phase(lastRound ? "Breathe out slowly" : "Breathe out", 0.45, 4);
+      if (!lastRound) await phase("Hold", null, 4);
+    }
+    $("sub").textContent = "";
+    $("cue").textContent = "And rest";
+    $("orb").style.transition = "transform 5s ease-in-out, opacity 5s ease-in-out";
+    $("orb").style.transform = "scale(.08)"; $("orb").style.opacity = .5;
+    cutPad();
+    await wait(3500);
+    // fake-out: it looks finished, so his guard drops
+    $("cue").textContent = "That's it. Nice work.";
+    $("sub").textContent = "3 rounds, 48 seconds";
+    $("done").hidden = false;
+    await Promise.race([wait(5200), new Promise((r) => { $("done").onmouseenter = r; $("done").onclick = r; $("done").onfocus = r; })]);
+    jump();
+  }
+
+  // ---- the face, redrawn every frame so it moves ----
+  function makeCracks() {
+    return Array.from({ length: 9 }, () => {
+      const pts = [[Math.random() - 0.5, -0.9 + Math.random() * 0.5]];
+      for (let j = 0; j < 7; j++) { const [x, y] = pts[pts.length - 1]; pts.push([x + (Math.random() - 0.5) * 0.14, y + 0.08]); }
+      return pts;
+    });
+  }
+
+  function renderFace(c, w, h, p, scale, cracks) {
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.fillStyle = "#000"; c.fillRect(0, 0, w, h);
+    const cx = w / 2 + (Math.random() - 0.5) * 6, cy = h / 2, r = Math.min(w, h) * 0.47 * scale;
+    const ry = r * (1.02 + p * 0.12);
+    let g = c.createRadialGradient(cx, cy - r * 0.25, r * 0.05, cx, cy, ry * 1.05);
+    g.addColorStop(0, "#e0dccb"); g.addColorStop(0.45, "#a9a590"); g.addColorStop(0.8, "#4a4838"); g.addColorStop(1, "rgba(10,10,8,0)");
+    c.fillStyle = g; c.beginPath(); c.ellipse(cx, cy, r * 0.68, ry, 0, 0, Math.PI * 2); c.fill();
+    // veins
+    c.strokeStyle = "rgba(70,40,40,.35)"; c.lineWidth = Math.max(1, r * 0.004);
+    cracks.forEach((pts) => {
+      c.beginPath(); c.moveTo(cx + pts[0][0] * r, cy + pts[0][1] * r);
+      pts.forEach(([x, y]) => c.lineTo(cx + x * r, cy + y * r)); c.stroke();
+    });
+    [-1, 1].forEach((s) => {
+      const ex = cx + s * r * 0.27, ey = cy - r * 0.18;
+      const sry = r * (0.25 + p * 0.06);
+      const eg = c.createRadialGradient(ex, ey, 1, ex, ey, r * 0.3);
+      eg.addColorStop(0, "#000"); eg.addColorStop(0.65, "#060504"); eg.addColorStop(1, "rgba(30,28,22,0)");
+      c.fillStyle = eg; c.beginPath(); c.ellipse(ex, ey, r * 0.19, sry, s * 0.18, 0, Math.PI * 2); c.fill();
+      // dark streaks running down from the eyes
+      const tl = r * (0.15 + p * 0.75);
+      const tg = c.createLinearGradient(ex, ey, ex, ey + sry + tl);
+      tg.addColorStop(0, "rgba(0,0,0,.95)"); tg.addColorStop(1, "rgba(30,0,0,0)");
+      c.fillStyle = tg;
+      c.fillRect(ex - r * 0.025 + s * r * 0.03, ey, r * 0.045, sry + tl);
+      // pupils that follow the cursor
+      const px = ex + look.x * r * 0.06, py = ey + look.y * r * 0.07;
+      c.fillStyle = "rgba(180,20,20,.55)"; c.beginPath(); c.arc(px, py, r * 0.04, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#fbf7ea"; c.beginPath(); c.arc(px, py, r * 0.017, 0, Math.PI * 2); c.fill();
+    });
+    // the jaw keeps dropping
+    const my = cy + r * (0.42 + p * 0.12), mrx = r * (0.15 + p * 0.07), mry = r * (0.2 + p * 0.34);
+    c.fillStyle = "#000"; c.beginPath();
+    for (let a = 0; a <= Math.PI * 2 + 0.01; a += 0.2) {
+      const j = 1 + (Math.random() - 0.5) * 0.08;
+      const x = cx + Math.cos(a) * mrx * j, y = my + Math.sin(a) * mry * j;
+      a === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+    }
+    c.fill();
+    const mg = c.createRadialGradient(cx, my, 1, cx, my, mry * 1.3);
+    mg.addColorStop(0.6, "rgba(0,0,0,0)"); mg.addColorStop(0.8, "rgba(0,0,0,.6)"); mg.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = mg; c.fillRect(cx - mry * 1.4, my - mry * 1.4, mry * 2.8, mry * 2.8);
+    // grain
+    for (let k = 0; k < 1800; k++) {
+      c.fillStyle = "rgba(" + (Math.random() > 0.5 ? "255,255,255" : "0,0,0") + "," + (Math.random() * 0.14) + ")";
+      c.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    }
+  }
+
+  function sizeCanvas(cv) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = cv.clientWidth * dpr; cv.height = cv.clientHeight * dpr;
+    const off = document.createElement("canvas");
+    off.width = cv.width; off.height = cv.height;
+    return off;
+  }
+
+  function ghost() {
+    const cv = $("face");
+    cv.classList.add("ghost"); cv.hidden = false;
+    const off = sizeCanvas(cv);
+    renderFace(off.getContext("2d"), off.width, off.height, 0, 1, makeCracks());
+    const c = cv.getContext("2d");
+    c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(off, 0, 0);
+    setTimeout(() => { cv.hidden = true; cv.classList.remove("ghost"); }, 90);
+  }
+
+  async function hit(ms, dur, scale) {
+    const cv = $("face");
+    cv.classList.remove("ghost");
+    cv.hidden = false;
+    const off = sizeCanvas(cv), oc = off.getContext("2d"), c = cv.getContext("2d"), W = cv.width, H = cv.height;
+    const cracks = makeCracks(), still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    cv.classList.remove("go"); void cv.offsetWidth; cv.classList.add("go");
+    scream(dur);
+    const t0 = performance.now();
+    let live = true;
+    const frame = (now) => {
+      if (!live) return;
+      const p = Math.min(1, (now - t0) / ms);
+      renderFace(oc, W, H, p, scale, cracks);
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      // glitch: tear the image into shifted horizontal bands
+      if (!still && Math.random() < 0.45) {
+        const bands = 14, bh = Math.ceil(H / bands);
+        c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
+        for (let b = 0; b < bands; b++) {
+          const dx = Math.random() < 0.35 ? (Math.random() - 0.5) * W * 0.08 : 0;
+          c.drawImage(off, 0, b * bh, W, bh, dx, b * bh, W, bh);
+        }
+      } else c.drawImage(off, 0, 0);
+      if (Math.random() < 0.12) { c.fillStyle = "rgba(110,0,0,.28)"; c.fillRect(0, 0, W, H); }
+      if (!still) cv.style.translate = (Math.random() * 34 - 17) + "px " + (Math.random() * 34 - 17) + "px";
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    await wait(ms);
+    live = false;
+    cv.style.translate = "";
+    cv.classList.remove("go");
+    c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
+  }
+
+  async function jump() {
+    $("done").hidden = true;
+    await hit(2600, 2.4, 1);
+    // silence and black: he thinks it's over
+    await wait(2800);
+    // second hit, closer and shorter
+    await hit(1000, 0.9, 1.5);
+    $("face").hidden = true;
+    $("after").hidden = false; $("again").focus();
+    running = false;
+  }
+
+  $("start").addEventListener("click", run);
+  $("again").addEventListener("click", () => {
+    $("after").hidden = true; $("session").hidden = true; $("intro").hidden = false;
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>
