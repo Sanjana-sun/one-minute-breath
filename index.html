@@ -214,8 +214,6 @@
     if (running) return;
     running = true;
     initAudio();
-    // never wait on this: some browsers leave the request hanging
-    try { const fs = document.documentElement.requestFullscreen?.(); if (fs) fs.catch(() => {}); } catch (e) {}
     $("intro").hidden = true; $("session").hidden = false; $("done").hidden = true;
     $("cue").style.opacity = 1;
     $("orb").style.transition = "transform 4s ease-in-out, opacity 4s ease-in-out";
@@ -377,7 +375,6 @@
   $("start").addEventListener("click", run);
   $("again").addEventListener("click", () => {
     $("after").hidden = true; $("session").hidden = true; $("intro").hidden = false;
-    try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
   });
 })();
 </script>
